@@ -1,0 +1,6 @@
+@RadWareF1_HostAddress = http://localhost:5016
+
+GET {{RadWareF1_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
