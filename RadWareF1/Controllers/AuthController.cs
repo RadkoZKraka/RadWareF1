@@ -1,9 +1,12 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using RadWareF1.Application.Abstractions;
 using RadWareF1.Application.Contracts.Auth;
+using RadWareF1.Application.Contracts.Auth.Login;
 using RadWareF1.Application.Contracts.Auth.LoginUser;
+using RadWareF1.Application.Contracts.Auth.Logout;
+using RadWareF1.Application.Contracts.Auth.RefreshToken;
 using RadWareF1.Application.Contracts.Auth.RegisterUser;
-using RadWareF1.Application.Services;
 
 namespace RadWareF1.Controllers;
 
@@ -19,7 +22,9 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("register")]
-    public async Task<ActionResult<RegisterUserResponse>> Register(RegisterUserRequest request, CancellationToken cancellationToken)
+    public async Task<ActionResult<RegisterUserResponse>> Register(
+        [FromBody] RegisterUserRequest request,
+        CancellationToken cancellationToken)
     {
         try
         {
@@ -33,7 +38,9 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("login")]
-    public async Task<ActionResult<LoginUserResponse>> Login(LoginUserRequest request, CancellationToken cancellationToken)
+    public async Task<ActionResult<LoginResponse>> Login(
+        [FromBody] LoginRequest request,
+        CancellationToken cancellationToken)
     {
         try
         {
@@ -44,5 +51,32 @@ public class AuthController : ControllerBase
         {
             return Unauthorized(new { message = ex.Message });
         }
+    }
+
+    [HttpPost("refresh")]
+    [AllowAnonymous]
+    public async Task<ActionResult<AuthTokensResponse>> Refresh(
+        [FromBody] RefreshTokenRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var response = await _authService.RefreshAsync(request, cancellationToken);
+            return Ok(response);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+    }
+
+    [HttpPost("logout")]
+    [AllowAnonymous]
+    public async Task<IActionResult> Logout(
+        [FromBody] LogoutRequest request,
+        CancellationToken cancellationToken)
+    {
+        await _authService.LogoutAsync(request, cancellationToken);
+        return NoContent();
     }
 }

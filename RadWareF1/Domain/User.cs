@@ -7,4 +7,5 @@ public class User
     public string PasswordHash { get; set; } = null!;
     public Profile Profile { get; set; } = null!;
     public List<GroupMember> GroupMembers { get; set; } = new();
+    public ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
 }

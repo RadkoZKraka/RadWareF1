@@ -1,6 +1,6 @@
-namespace RadWareF1.Application.Abstractions;
-
 using RadWareF1.Domain;
+
+namespace RadWareF1.Application.Abstractions;
 
 public interface IJwtTokenService
 {

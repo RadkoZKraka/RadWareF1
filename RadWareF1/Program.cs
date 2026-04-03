@@ -2,10 +2,14 @@ using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using OpenTelemetry.Logs;
+using OpenTelemetry.Resources;
 using RadWareF1.Application.Abstractions;
-using RadWareF1.Application.Contracts.Auth;
+using RadWareF1.Application.Abstractions.Auth;
 using RadWareF1.Application.Services;
+using RadWareF1.Infrastructure.Auth;
 using RadWareF1.Persistance;
+using JwtOptions = RadWareF1.Application.Contracts.Auth.JwtOptions;
 
 namespace RadWareF1;
 
@@ -15,6 +19,33 @@ public class Program
     {
         var builder = WebApplication.CreateBuilder(args);
 
+        var otlpEndpoint = builder.Configuration["OpenTelemetry:Endpoint"];
+        var otlpAuthorization = builder.Configuration["OpenTelemetry:Authorization"];
+
+        builder.Logging.ClearProviders();
+        builder.Logging.AddConsole();
+        builder.Logging.AddOpenTelemetry(options =>
+        {
+            options.IncludeFormattedMessage = true;
+            options.IncludeScopes = true;
+            options.ParseStateValues = true;
+
+            options.SetResourceBuilder(
+                ResourceBuilder.CreateDefault()
+                    .AddService("RadWareF1", serviceVersion: "1.0.0"));
+
+            options.AddOtlpExporter(exporter =>
+            {
+                exporter.Endpoint = new Uri(otlpEndpoint!);
+                exporter.Headers = $"Authorization={otlpAuthorization}";
+                exporter.Protocol = OpenTelemetry.Exporter.OtlpExportProtocol.HttpProtobuf;
+                exporter.ExportProcessorType = OpenTelemetry.ExportProcessorType.Simple; // s
+            });
+
+
+        });
+
+        builder.Services.AddAuthorization();
         builder.Configuration.AddUserSecrets<Program>(optional: true);
 
         builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("Jwt"));
@@ -76,9 +107,12 @@ public class Program
                 };
             });
 
+        builder.Services.AddHttpContextAccessor();
+        builder.Services.AddScoped<IUserService, UserService>();
         builder.Services.AddScoped<IPasswordService, PasswordService>();
         builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
         builder.Services.AddScoped<IAuthService, AuthService>();
+        builder.Services.AddScoped<IRefreshTokenService, RefreshTokenService>();
 
         builder.Services.AddSwaggerGen();
 
@@ -93,6 +127,8 @@ public class Program
         }
 
         app.UseHttpsRedirection();
+
+
 
         app.UseAuthentication();
         app.UseAuthorization();

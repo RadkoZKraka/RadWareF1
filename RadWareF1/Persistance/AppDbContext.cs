@@ -13,6 +13,7 @@ public class AppDbContext : DbContext
     public DbSet<Profile> Profiles => Set<Profile>();
     public DbSet<Group> Groups => Set<Group>();
     public DbSet<GroupMember> GroupMembers => Set<GroupMember>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -32,6 +33,34 @@ public class AppDbContext : DbContext
 
             entity.HasIndex(x => x.Email)
                 .IsUnique();
+        });
+
+        modelBuilder.Entity<RefreshToken>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+
+            entity.ToTable("RefreshTokens");
+
+            entity.Property(x => x.TokenHash)
+                .IsRequired()
+                .HasMaxLength(256);
+
+            entity.Property(x => x.CreatedAtUtc)
+                .IsRequired();
+
+            entity.Property(x => x.ExpiresAtUtc)
+                .IsRequired();
+
+            entity.Property(x => x.ReplacedByTokenHash)
+                .HasMaxLength(256);
+
+            entity.HasIndex(x => x.TokenHash)
+                .IsUnique();
+
+            entity.HasOne(x => x.User)
+                .WithMany(x => x.RefreshTokens)
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<Profile>(entity =>
