@@ -122,6 +122,9 @@ public class AppDbContext : DbContext
                 .WithMany(x => x.Members)
                 .HasForeignKey(x => x.GroupId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            entity.Property(x => x.JoinedAtUtc)
+                .IsRequired();
         });
     }
 }

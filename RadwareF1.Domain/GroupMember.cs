@@ -9,4 +9,6 @@ public class GroupMember
     public Group Group { get; set; } = null!;
 
     public GroupRoleEnum Role { get; set; }
+
+    public DateTime JoinedAtUtc { get; set; }
 }
