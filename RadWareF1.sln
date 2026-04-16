@@ -12,6 +12,28 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RadWareF1.Infrastructure", 
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RadWareF1.Tests", "RadWareF1.Tests\RadWareF1.Tests.csproj", "{1B47F21A-CA16-489D-A581-F88931466AC3}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Clients", "Clients", "{B35A1D15-2ECF-4C6D-9F95-E955A610E8D2}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Web App", "Web App", "{A8C7DB11-556A-4B5E-BD92-F2E1A84C7A3A}"
+	ProjectSection(SolutionItems) = preProject
+		web-app\.env.example = web-app\.env.example
+		web-app\package.json = web-app\package.json
+		web-app\package-lock.json = web-app\package-lock.json
+		web-app\next.config.ts = web-app\next.config.ts
+		web-app\tsconfig.json = web-app\tsconfig.json
+		web-app\eslint.config.mjs = web-app\eslint.config.mjs
+		web-app\postcss.config.mjs = web-app\postcss.config.mjs
+		web-app\src\app\layout.tsx = web-app\src\app\layout.tsx
+		web-app\src\app\page.tsx = web-app\src\app\page.tsx
+		web-app\src\app\globals.css = web-app\src\app\globals.css
+		web-app\src\components\layout\app-frame.tsx = web-app\src\components\layout\app-frame.tsx
+		web-app\src\components\ui\info-card.tsx = web-app\src\components\ui\info-card.tsx
+		web-app\src\components\ui\section-heading.tsx = web-app\src\components\ui\section-heading.tsx
+		web-app\src\features\app\api.ts = web-app\src\features\app\api.ts
+		web-app\src\features\app\f1shots-web-app.tsx = web-app\src\features\app\f1shots-web-app.tsx
+		web-app\src\features\app\types.ts = web-app\src\features\app\types.ts
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -42,5 +64,8 @@ Global
 		{1B47F21A-CA16-489D-A581-F88931466AC3}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{1B47F21A-CA16-489D-A581-F88931466AC3}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{1B47F21A-CA16-489D-A581-F88931466AC3}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{A8C7DB11-556A-4B5E-BD92-F2E1A84C7A3A} = {B35A1D15-2ECF-4C6D-9F95-E955A610E8D2}
 	EndGlobalSection
 EndGlobal

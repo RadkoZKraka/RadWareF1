@@ -47,6 +47,24 @@ public partial class Program
 
         builder.Services.AddAuthorization();
         builder.Configuration.AddUserSecrets<Program>(optional: true);
+        builder.Services.AddCors(options =>
+        {
+            options.AddPolicy("WebApp", policy =>
+            {
+                policy
+                    .WithOrigins(
+                        "http://localhost:3000",
+                        "http://127.0.0.1:3000",
+                        "http://localhost:3001",
+                        "http://127.0.0.1:3001",
+                        "https://localhost:3000",
+                        "https://127.0.0.1:3000",
+                        "https://localhost:3001",
+                        "https://127.0.0.1:3001")
+                    .AllowAnyHeader()
+                    .AllowAnyMethod();
+            });
+        });
 
         builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("Jwt"));
 
@@ -130,6 +148,7 @@ public partial class Program
         }
 
         app.UseHttpsRedirection();
+        app.UseCors("WebApp");
 
 
 
