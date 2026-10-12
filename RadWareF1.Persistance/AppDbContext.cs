@@ -13,6 +13,7 @@ public class AppDbContext : DbContext
 
     public DbSet<User> Users => Set<User>();
     public DbSet<Profile> Profiles => Set<Profile>();
+    public DbSet<Friendship> Friendships => Set<Friendship>();
     public DbSet<Group> Groups => Set<Group>();
     public DbSet<GroupMember> GroupMembers => Set<GroupMember>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
@@ -78,6 +79,29 @@ public class AppDbContext : DbContext
 
             entity.HasIndex(x => x.UserId)
                 .IsUnique();
+        });
+
+        modelBuilder.Entity<Friendship>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+
+            entity.ToTable("Friendships");
+
+            entity.Property(x => x.CreatedAtUtc)
+                .IsRequired();
+
+            entity.HasIndex(x => new { x.UserAId, x.UserBId })
+                .IsUnique();
+
+            entity.HasOne(x => x.UserA)
+                .WithMany()
+                .HasForeignKey(x => x.UserAId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.UserB)
+                .WithMany()
+                .HasForeignKey(x => x.UserBId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<Group>(entity =>

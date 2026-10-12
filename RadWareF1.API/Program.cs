@@ -73,8 +73,12 @@ public partial class Program
         builder.Services.AddControllers();
         builder.Services.AddOpenApi();
 
+        var postgresConnectionString = Common.PostgresConnectionStringResolver.Resolve(
+            builder.Configuration,
+            builder.Environment.EnvironmentName);
+
         builder.Services.AddDbContext<AppDbContext>(options =>
-            options.UseNpgsql(builder.Configuration.GetConnectionString("Default")));
+            options.UseNpgsql(postgresConnectionString));
 
         builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             .AddJwtBearer(options =>
@@ -129,6 +133,7 @@ public partial class Program
 
         builder.Services.AddHttpContextAccessor();
         builder.Services.AddScoped<IUserService, UserService>();
+        builder.Services.AddScoped<IFriendService, FriendService>();
         builder.Services.AddScoped<IPasswordService, PasswordService>();
         builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
         builder.Services.AddScoped<IAuthService, AuthService>();
@@ -145,6 +150,10 @@ public partial class Program
         if (app.Environment.IsDevelopment())
         {
             app.MapOpenApi();
+            app.UseSwagger();
+            app.UseSwaggerUI();
+
+            app.MapGet("/", () => Results.Redirect("/swagger"));
         }
 
         app.UseHttpsRedirection();

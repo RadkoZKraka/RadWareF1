@@ -32,6 +32,21 @@ export type UserSession = {
   accessTokenExpiresAtUtc: string;
 };
 
+export type FriendResponse = {
+  userId: string;
+  email: string;
+  addedAtUtc: string;
+};
+
+export type AddFriendRequest = {
+  identifier: string;
+};
+
+export type AddFriendResponse = {
+  friend: FriendResponse;
+  isNewFriend: boolean;
+};
+
 export type MeResponse = {
   id: string;
   email: string;

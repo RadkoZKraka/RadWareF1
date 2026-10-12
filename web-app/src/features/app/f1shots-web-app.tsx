@@ -1,18 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppFrame } from "@/components/layout/app-frame";
 import { InfoCard } from "@/components/ui/info-card";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { api, roleLabels, visibilityLabels } from "@/features/app/api";
 import type {
   AuthMode,
+  FriendResponse,
   CreateGroupResponse,
   GroupDetailsResponse,
   GroupMemberResponse,
   GroupVisibility,
   LoginResponse,
-  MeResponse,
   MyGroupResponse,
   PublicGroupResponse,
   RegisterResponse,
@@ -35,9 +35,9 @@ export function F1ShotsWebApp() {
   );
   const [session, setSession] = useState<UserSession | null>(null);
 
-  const [currentUser, setCurrentUser] = useState<MeResponse | null>(null);
   const [myGroups, setMyGroups] = useState<MyGroupResponse[]>([]);
   const [publicGroups, setPublicGroups] = useState<PublicGroupResponse[]>([]);
+  const [friends, setFriends] = useState<FriendResponse[]>([]);
   const [selectedGroupDetails, setSelectedGroupDetails] =
     useState<GroupDetailsResponse | null>(null);
   const [selectedGroupMembers, setSelectedGroupMembers] = useState<
@@ -51,13 +51,30 @@ export function F1ShotsWebApp() {
   const [createVisibility, setCreateVisibility] =
     useState<GroupVisibility>(0);
   const [joinCode, setJoinCode] = useState("");
+  const [friendIdentifier, setFriendIdentifier] = useState("");
   const [updateGroupName, setUpdateGroupName] = useState("");
   const [updateVisibility, setUpdateVisibility] =
     useState<GroupVisibility>(0);
   const [isLoadingHome, setIsLoadingHome] = useState(false);
+  const [isAddingFriend, setIsAddingFriend] = useState(false);
   const [homeStatusMessage, setHomeStatusMessage] = useState(
     "Po zalogowaniu odświeżymy dane użytkownika i grup.",
   );
+  const [friendStatusMessage, setFriendStatusMessage] = useState(
+    "Dodaj znajomego po user ID albo e-mailu.",
+  );
+  const lastLoadedSessionTokenRef = useRef<string | null>(null);
+
+  const sessionUserId = useMemo(
+    () => getUserIdFromAccessToken(session?.accessToken),
+    [session?.accessToken],
+  );
+
+  useEffect(() => {
+    if (!session) return;
+
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [session]);
 
   const canSubmitAuth = useMemo(() => {
     const commonFieldsFilled = email.trim().length > 0 && password.length > 0;
@@ -107,15 +124,15 @@ export function F1ShotsWebApp() {
     setIsLoadingHome(true);
 
     try {
-      const [me, mine, publicList] = await Promise.all([
-        api.get<MeResponse>("/api/User/me", session.accessToken),
+      const [mine, publicList, friendList] = await Promise.all([
         api.get<MyGroupResponse[]>("/api/Groups/mine", session.accessToken),
         api.get<PublicGroupResponse[]>("/api/Groups/public", session.accessToken),
+        api.getFriends(session.accessToken),
       ]);
 
-      setCurrentUser(me);
       setMyGroups(mine);
       setPublicGroups(publicList);
+      setFriends(friendList);
       setHomeStatusMessage("Dane zostały odświeżone.");
 
       if (selectedGroupDetails) {
@@ -130,11 +147,48 @@ export function F1ShotsWebApp() {
     }
   }, [loadSelectedGroup, selectedGroupDetails, session]);
 
-  useEffect(() => {
-    if (session && !currentUser && !isLoadingHome) {
-      void refreshHome();
+  async function addFriend() {
+    if (!session || !friendIdentifier.trim()) return;
+
+    setIsAddingFriend(true);
+
+    try {
+      const response = await api.addFriend(
+        { identifier: friendIdentifier.trim() },
+        session.accessToken,
+      );
+
+      setFriendIdentifier("");
+      setFriendStatusMessage(
+        response.isNewFriend
+          ? `Dodano znajomego: ${response.friend.email}.`
+          : `${response.friend.email} jest już w znajomych.`,
+      );
+      await refreshHome();
+    } catch (error) {
+      setFriendStatusMessage(
+        error instanceof Error
+          ? error.message
+          : "Nie udało się dodać znajomego.",
+      );
+    } finally {
+      setIsAddingFriend(false);
     }
-  }, [currentUser, isLoadingHome, refreshHome, session]);
+  }
+
+  useEffect(() => {
+    if (!session) {
+      lastLoadedSessionTokenRef.current = null;
+      return;
+    }
+
+    if (lastLoadedSessionTokenRef.current === session.accessToken || isLoadingHome) {
+      return;
+    }
+
+    lastLoadedSessionTokenRef.current = session.accessToken;
+    void refreshHome();
+  }, [isLoadingHome, refreshHome, session]);
 
   async function submitAuth() {
     if (!canSubmitAuth) return;
@@ -155,8 +209,23 @@ export function F1ShotsWebApp() {
         });
 
         setRegisterResult(response);
+        const loginResponse = await api.post<
+          { email: string; password: string },
+          LoginResponse
+        >("/api/Auth/login", {
+          email: email.trim(),
+          password,
+        });
+
+        setAuthResult(loginResponse);
+        setSession({
+          email: email.trim(),
+          accessToken: loginResponse.accessToken,
+          refreshToken: loginResponse.refreshToken,
+          accessTokenExpiresAtUtc: loginResponse.accessTokenExpiresAtUtc,
+        });
         setStatusMessage(
-          "Rejestracja zakończona powodzeniem. Teraz możesz przełączyć się na logowanie.",
+          "Rejestracja zakończona powodzeniem i zalogowano automatycznie.",
         );
       } else {
         const response = await api.post<
@@ -319,55 +388,90 @@ export function F1ShotsWebApp() {
     setSession(null);
     setAuthResult(null);
     setRegisterResult(null);
-    setCurrentUser(null);
     setMyGroups([]);
     setPublicGroups([]);
+    setFriends([]);
     setSelectedGroupDetails(null);
     setSelectedGroupMembers([]);
     setLatestJoinCodeByGroupId({});
     setPassword("");
+    setIsAddingFriend(false);
     setStatusMessage("Sesja została wyczyszczona lokalnie.");
     setHomeStatusMessage("Sesja została wyczyszczona lokalnie.");
+    setFriendIdentifier("");
+    setFriendStatusMessage("Dodaj znajomego po user ID albo e-mailu.");
+    lastLoadedSessionTokenRef.current = null;
   }
 
   return (
     <AppFrame>
-      <main className="flex flex-1 flex-col gap-8">
-        <section className="relative overflow-hidden rounded-[36px] border border-[color:var(--card-border)] bg-[radial-gradient(circle_at_top_left,_rgba(221,28,26,0.18),_transparent_32%),linear-gradient(135deg,_rgba(255,255,255,0.9),_rgba(255,255,255,0.66))] px-6 py-8 shadow-[0_24px_80px_rgba(15,23,42,0.12)] backdrop-blur xl:px-10 xl:py-10 dark:bg-[radial-gradient(circle_at_top_left,_rgba(255,77,79,0.25),_transparent_32%),linear-gradient(135deg,_rgba(17,24,39,0.94),_rgba(17,24,39,0.78))]">
-          <div className="absolute right-0 top-0 h-48 w-48 rounded-full bg-[color:var(--gold)]/20 blur-3xl" />
-          <div className="relative grid gap-8 lg:grid-cols-[1.2fr_0.8fr]">
-            <div className="space-y-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[var(--accent)]">
-                F1Shots Web Client
-              </p>
-              <h1 className="max-w-3xl text-4xl font-semibold tracking-tight text-[var(--foreground)] sm:text-5xl">
-                Same backend flows as iOS and Android, now on the web.
-              </h1>
-              <p className="max-w-2xl text-base leading-8 text-[var(--muted)] sm:text-lg">
-                Register, login, manage groups, join with code, inspect members,
-                and edit the selected group from one dashboard talking directly
-                to your RadWareF1 API.
-              </p>
-            </div>
+      <main className="flex flex-1 flex-col gap-10 lg:gap-12">
+        {!session ? (
+          <section className="relative overflow-hidden rounded-[44px] border border-(--card-border) bg-[linear-gradient(180deg,color-mix(in_srgb,var(--card)_92%,white),var(--card))] px-6 py-10 shadow-(--shadow-soft) xl:px-10 xl:py-14">
+            <div className="absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,transparent,color-mix(in_srgb,var(--accent)_28%,transparent),transparent)]" />
+            <div className="absolute -left-24 -top-24 h-56 w-56 rounded-full bg-(--accent)/12 blur-3xl" />
+            <div className="absolute right-0 top-0 h-48 w-48 rounded-full bg-(--gold)/12 blur-3xl" />
+            <div className="absolute -bottom-32 right-24 h-52 w-52 rounded-full bg-white/18 blur-3xl dark:bg-white/6" />
+            <div className="relative space-y-10">
+              <div className="mx-auto flex max-w-3xl flex-col items-center space-y-6 text-center">
+                <div className="flex flex-wrap justify-center gap-3 text-[11px] font-semibold uppercase tracking-[0.28em] text-(--muted)">
+                  <span className="rounded-full border border-(--card-border) bg-white/60 px-3 py-2 text-(--gold) dark:bg-white/5">
+                    F1Shots Race Club
+                  </span>
+                  <span className="rounded-full border border-(--card-border) bg-white/60 px-3 py-2 dark:bg-white/5">
+                    Predictions • leagues • race day drama
+                  </span>
+                </div>
+                <h1 className="max-w-4xl text-5xl font-semibold tracking-[-0.06em] text-foreground sm:text-6xl xl:text-7xl">
+                  A premium home for Formula 1 prediction leagues and podium calls.
+                </h1>
+                <p className="max-w-2xl text-base leading-8 text-(--muted) sm:text-xl">
+                  Create private leagues, invite friends with a code, and track who
+                  called the grid best — from lights out to the chequered flag.
+                </p>
+                <div className="grid w-full gap-3 sm:grid-cols-3">
+                  <HeroMetric label="Race rooms" value="Private & public" />
+                  <HeroMetric label="Picks flow" value="Fast, social" />
+                  <HeroMetric label="Feel" value="Paddock premium" />
+                </div>
+              </div>
 
-            <InfoCard
-              title={session ? "Session active" : "Auth status"}
-              eyebrow="Runtime"
-              accent={session ? "gold" : "red"}
-            >
-              <p>API base URL: {api.baseUrl}</p>
-              <p>
-                {session
-                  ? `Logged in as ${session.email}`
-                  : "No active session yet. Use register or login to continue."}
-              </p>
-            </InfoCard>
-          </div>
-        </section>
+              <div className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
+                <InfoCard
+                  title="Built for race-weekend circles"
+                  eyebrow="Product idea"
+                  accent="slate"
+                >
+                  <p>
+                    Think fantasy league energy without money involved — just bragging
+                    rights, perfect podium calls, and chaos when somebody predicts a
+                    wild P7 finish.
+                  </p>
+                  <p>
+                    Use the current backend flow to register, create rooms, invite
+                    friends, and shape the base of the prediction product.
+                  </p>
+                </InfoCard>
+
+                <InfoCard
+                  title="Ready for sign-in"
+                  eyebrow="Runtime"
+                  accent="red"
+                >
+                  <p>API base URL: {api.baseUrl}</p>
+                  <p>
+                    Create an account or log in to start building race-prediction
+                    leagues.
+                  </p>
+                </InfoCard>
+              </div>
+            </div>
+          </section>
+        ) : null}
 
         {!session ? (
           <section className="grid gap-8 lg:grid-cols-[0.92fr_1.08fr]">
-            <InfoCard title="Auth flow" eyebrow="Register or Login" accent="red">
+            <InfoCard title="Enter the paddock" eyebrow="Register or Login" accent="red">
               <div className="space-y-4">
                 <div className="flex flex-wrap gap-3">
                   {(["register", "login"] as const).map((option) => (
@@ -378,14 +482,14 @@ export function F1ShotsWebApp() {
                         setMode(option);
                         setStatusMessage(
                           option === "register"
-                            ? "Wpisz dane i utwórz konto w lokalnym API."
-                            : "Wpisz dane istniejącego konta i pobierz token JWT.",
+                            ? "Załóż konto i przygotuj pierwszą ligę typowania."
+                            : "Zaloguj się i wróć do swoich lig oraz typów.",
                         );
                       }}
                       className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
                         mode === option
-                          ? "bg-[var(--accent)] text-white"
-                          : "border border-[color:var(--card-border)] bg-white/70 text-[var(--foreground)] dark:bg-white/5"
+                          ? "bg-[linear-gradient(135deg,var(--accent),var(--accent-strong))] text-white shadow-[0_12px_30px_rgba(255,77,79,0.26)]"
+                          : "border border-(--card-border) bg-white/60 text-foreground dark:bg-white/5"
                       }`}
                     >
                       {option === "register" ? "Register" : "Login"}
@@ -414,24 +518,32 @@ export function F1ShotsWebApp() {
                   type="button"
                   onClick={() => void submitAuth()}
                   disabled={isAuthenticating || !canSubmitAuth}
-                  className="rounded-full bg-[var(--accent)] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:opacity-55"
+                  className="rounded-full bg-[linear-gradient(135deg,var(--accent),var(--accent-strong))] px-5 py-3 text-sm font-semibold text-white shadow-[0_18px_40px_rgba(255,77,79,0.28)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-55"
                 >
                   {isAuthenticating
-                    ? "Working..."
+                    ? "Launching..."
                     : mode === "register"
                       ? "Create account"
-                      : "Sign in"}
+                      : "Enter dashboard"}
                 </button>
               </div>
             </InfoCard>
 
             <div className="grid gap-4">
-              <InfoCard title="Status" eyebrow="Feedback" accent="slate">
+              <InfoCard title="Race weekend status" eyebrow="Feedback" accent="slate">
                 <p>{statusMessage}</p>
               </InfoCard>
 
+              <InfoCard title="What this version already nails" eyebrow="Experience" accent="gold">
+                <ul className="space-y-3">
+                  <li>• fast auth flow for returning players</li>
+                  <li>• invite-only leagues powered by join codes</li>
+                  <li>• public league discovery for open race weekends</li>
+                </ul>
+              </InfoCard>
+
               {authResult ? (
-                <InfoCard title="Tokens" eyebrow="Login response" accent="gold">
+                <InfoCard title="Session payload" eyebrow="Login response" accent="gold">
                   <p>Access token: {authResult.accessToken}</p>
                   <p>Refresh token: {authResult.refreshToken}</p>
                   <p>Expires at: {authResult.accessTokenExpiresAtUtc}</p>
@@ -440,7 +552,7 @@ export function F1ShotsWebApp() {
 
               {registerResult ? (
                 <InfoCard
-                  title="User created"
+                  title="Driver profile created"
                   eyebrow="Register response"
                   accent="gold"
                 >
@@ -454,25 +566,25 @@ export function F1ShotsWebApp() {
             <section className="grid gap-8 lg:grid-cols-[1.05fr_0.95fr]">
               <div className="grid gap-4">
                 <SectionHeading
-                  eyebrow="Dashboard"
-                  title="Groups, members, and session state in one place."
-                  description="This mirrors the mobile clients and uses the same API endpoints, so web can evolve in lockstep with iOS and Android."
+                  eyebrow="League control"
+                  title="Manage your prediction rooms like a race engineer."
+                  description="This dashboard already covers the essentials: private leagues, discovery, members, and session state — wrapped in a sharper race-day presentation."
                 />
 
                 <div className="grid gap-4 md:grid-cols-3">
-                  <StatCard label="My groups" value={String(myGroups.length)} />
+                  <StatCard label="My leagues" value={String(myGroups.length)} />
                   <StatCard
-                    label="Public groups"
+                    label="Open leagues"
                     value={String(publicGroups.length)}
                   />
                   <StatCard
-                    label="Selected members"
+                    label="Grid size"
                     value={String(selectedGroupMembers.length)}
                   />
                 </div>
               </div>
 
-              <InfoCard title="Session controls" eyebrow="Actions" accent="gold">
+              <InfoCard title="Command panel" eyebrow="Actions" accent="gold">
                 <div className="flex flex-wrap gap-3">
                   <ActionButton
                     label="Refresh"
@@ -481,17 +593,20 @@ export function F1ShotsWebApp() {
                   />
                   <ActionButton label="Log out" onClick={logout} variant="dark" />
                 </div>
-                <p>{currentUser ? `Logged in as ${currentUser.email}` : "Loading user info..."}</p>
+                <div className="grid gap-3">
+                  <p>{session ? `Signed in as ${session.email}` : "Loading user info..."}</p>
+                  <CopyableIdentity label="Unique ID" value={sessionUserId} />
+                </div>
                 <p>{homeStatusMessage}</p>
               </InfoCard>
             </section>
 
             <section className="grid gap-8 xl:grid-cols-[0.9fr_1.1fr]">
               <div className="grid gap-4">
-                <InfoCard title="Create group" eyebrow="POST /api/Groups" accent="red">
+                <InfoCard title="Create league" eyebrow="POST /api/Groups" accent="red">
                   <div className="grid gap-4">
                     <Input
-                      label="Group name"
+                      label="League name"
                       value={createGroupName}
                       onChange={setCreateGroupName}
                     />
@@ -500,7 +615,7 @@ export function F1ShotsWebApp() {
                       onChange={setCreateVisibility}
                     />
                     <ActionButton
-                      label="Create"
+                      label="Create league"
                       onClick={() => void createGroup()}
                       disabled={isLoadingHome || !createGroupName.trim()}
                     />
@@ -508,42 +623,93 @@ export function F1ShotsWebApp() {
                 </InfoCard>
 
                 <InfoCard
-                  title="Join public group"
+                  title="Join with race code"
                   eyebrow="POST /api/Groups/{groupId}/join"
                   accent="slate"
                 >
                   <div className="grid gap-4">
                     <Input
-                      label="Join code"
+                      label="League code"
                       value={joinCode}
                       onChange={setJoinCode}
                     />
                     <ActionButton
-                      label="Join with code"
+                      label="Join league"
                       onClick={() => void joinGroup()}
                       disabled={isLoadingHome || !joinCode.trim()}
                     />
                   </div>
                 </InfoCard>
+
+                <InfoCard
+                  title="Add friend"
+                  eyebrow="POST /api/Friends"
+                  accent="gold"
+                >
+                  <div className="grid gap-4">
+                    <Input
+                      label="User ID or email"
+                      value={friendIdentifier}
+                      onChange={setFriendIdentifier}
+                    />
+                    <ActionButton
+                      label={isAddingFriend ? "Adding..." : "Add friend"}
+                      onClick={() => void addFriend()}
+                      disabled={isAddingFriend || !friendIdentifier.trim()}
+                    />
+                    <p className="text-sm leading-7 text-(--muted)">
+                      {friendStatusMessage}
+                    </p>
+                  </div>
+                </InfoCard>
+
+                <InfoCard title="Friends" eyebrow="GET /api/Friends" accent="slate">
+                  {friends.length === 0 ? (
+                    <p>Brak znajomych. Dodaj pierwszą osobę po ID albo e-mailu.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {friends.map((friend) => (
+                        <div
+                          key={friend.userId}
+                          className="rounded-3xl border border-(--card-border) bg-white/70 px-4 py-4 dark:bg-white/5"
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <p className="text-base font-semibold text-foreground">
+                                {friend.email}
+                              </p>
+                              <p className="font-mono text-xs text-(--muted)">
+                                {friend.userId}
+                              </p>
+                            </div>
+                            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-(--muted)">
+                              {friend.addedAtUtc.slice(0, 10)}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </InfoCard>
               </div>
 
               <div className="grid gap-4">
-                <InfoCard title="My groups" eyebrow="GET /api/Groups/mine" accent="gold">
+                <InfoCard title="My leagues" eyebrow="GET /api/Groups/mine" accent="gold">
                   <GroupList
                     items={myGroups.map((group) => ({
                       key: `my-${group.id}`,
                       title: group.name,
                       subtitle: `${visibilityLabels[group.visibility]} • ${group.membersCount} members`,
                       actionLabel:
-                        selectedGroupDetails?.id === group.id ? "Selected" : "Open",
+                        selectedGroupDetails?.id === group.id ? "Selected" : "Race room",
                       onAction: () => void loadSelectedGroup(group.id),
                     }))}
-                    emptyText="Nie masz jeszcze żadnej grupy. Stwórz własną albo dołącz kodem."
+                    emptyText="Nie masz jeszcze żadnej ligi. Załóż własną albo dołącz kodem od znajomych."
                   />
                 </InfoCard>
 
                 <InfoCard
-                  title="Public groups"
+                  title="Open leagues"
                   eyebrow="GET /api/Groups/public"
                   accent="slate"
                 >
@@ -552,10 +718,10 @@ export function F1ShotsWebApp() {
                       key: `public-${group.id}`,
                       title: group.name,
                       subtitle: `${group.membersCount} members`,
-                      actionLabel: "Details",
+                       actionLabel: "Preview",
                       onAction: () => void loadSelectedGroup(group.id),
                     }))}
-                    emptyText="Brak publicznych grup do wyświetlenia."
+                    emptyText="Brak otwartych lig do wyświetlenia."
                   />
                 </InfoCard>
               </div>
@@ -565,7 +731,7 @@ export function F1ShotsWebApp() {
               <section className="grid gap-8 lg:grid-cols-[0.95fr_1.05fr]">
                 <InfoCard
                   title={selectedGroupDetails.name}
-                  eyebrow="Selected group"
+                  eyebrow="Selected league"
                   accent="red"
                 >
                   <p>
@@ -574,14 +740,12 @@ export function F1ShotsWebApp() {
                   </p>
                   <p>Created: {selectedGroupDetails.createdAtUtc}</p>
                   {latestJoinCodeByGroupId[selectedGroupDetails.id] ? (
-                    <p>
-                      Join code: {latestJoinCodeByGroupId[selectedGroupDetails.id]}
-                    </p>
+                    <p>League code: {latestJoinCodeByGroupId[selectedGroupDetails.id]}</p>
                   ) : null}
                   {selectedGroupDetails.isMember ? (
                     <div className="pt-2">
                       <ActionButton
-                        label="Leave group"
+                        label="Leave league"
                         onClick={() => void leaveSelectedGroup()}
                         disabled={isLoadingHome}
                         variant="dark"
@@ -592,13 +756,13 @@ export function F1ShotsWebApp() {
 
                 <div className="grid gap-4">
                   <InfoCard
-                    title="Update group"
+                    title="Tune league"
                     eyebrow="PATCH /api/Groups/{groupId}"
                     accent="gold"
                   >
                     <div className="grid gap-4">
                       <Input
-                        label="New group name"
+                        label="League display name"
                         value={updateGroupName}
                         onChange={setUpdateGroupName}
                       />
@@ -607,7 +771,7 @@ export function F1ShotsWebApp() {
                         onChange={setUpdateVisibility}
                       />
                       <ActionButton
-                        label="Save changes"
+                        label="Save setup"
                         onClick={() => void updateSelectedGroup()}
                         disabled={isLoadingHome}
                       />
@@ -615,7 +779,7 @@ export function F1ShotsWebApp() {
                   </InfoCard>
 
                   <InfoCard
-                    title="Members"
+                    title="Grid & members"
                     eyebrow="GET /api/Groups/{groupId}/members"
                     accent="slate"
                   >
@@ -629,12 +793,12 @@ export function F1ShotsWebApp() {
                         {selectedGroupMembers.map((member) => (
                           <div
                             key={`member-${member.userId}`}
-                            className="flex flex-col justify-between gap-2 rounded-2xl border border-[color:var(--card-border)] bg-white/60 px-4 py-3 dark:bg-white/4 sm:flex-row sm:items-center"
+                            className="flex flex-col justify-between gap-2 rounded-2xl border border-(--card-border) bg-white/70 px-4 py-3 dark:bg-white/4 sm:flex-row sm:items-center"
                           >
-                            <p className="font-mono text-xs text-[var(--foreground)]">
+                            <p className="font-mono text-xs text-foreground">
                               {member.userId}
                             </p>
-                            <p className="text-sm font-semibold text-[var(--muted)]">
+                            <p className="text-sm font-semibold text-(--muted)">
                               {roleLabels[member.role]}
                             </p>
                           </div>
@@ -665,16 +829,27 @@ function Input({
 }) {
   return (
     <label className="grid gap-2">
-      <span className="text-sm font-semibold text-[var(--foreground)]">
+      <span className="text-sm font-semibold text-foreground">
         {label}
       </span>
       <input
         type={type}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="rounded-2xl border border-[color:var(--card-border)] bg-white/80 px-4 py-3 text-sm text-[var(--foreground)] outline-none transition focus:border-[var(--accent)] focus:ring-4 focus:ring-[color:var(--accent)]/10 dark:bg-white/5"
+        className="rounded-2xl border border-(--card-border) bg-white/75 px-4 py-3 text-sm text-foreground outline-none transition placeholder:text-(--muted)/70 focus:border-(--gold) focus:bg-white focus:ring-4 focus:ring-(--gold)/10 dark:bg-white/6 dark:focus:bg-white/8"
       />
     </label>
+  );
+}
+
+function HeroMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-3xl border border-(--card-border) bg-white/70 px-4 py-4 shadow-(--shadow-soft) dark:bg-white/5">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-(--muted)">
+        {label}
+      </p>
+      <p className="mt-2 text-lg font-semibold text-foreground">{value}</p>
+    </div>
   );
 }
 
@@ -687,9 +862,7 @@ function VisibilitySelector({
 }) {
   return (
     <div className="grid gap-2">
-      <span className="text-sm font-semibold text-[var(--foreground)]">
-        Visibility
-      </span>
+      <span className="text-sm font-semibold text-foreground">Visibility</span>
       <div className="flex flex-wrap gap-3">
         {([0, 1, 2] as GroupVisibility[]).map((option) => (
           <button
@@ -698,8 +871,8 @@ function VisibilitySelector({
             onClick={() => onChange(option)}
             className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
               value === option
-                ? "bg-[var(--accent)] text-white"
-                : "border border-[color:var(--card-border)] bg-white/70 text-[var(--foreground)] dark:bg-white/5"
+                ? "bg-[linear-gradient(135deg,var(--accent),var(--accent-strong))] text-white shadow-[0_12px_30px_rgba(255,77,79,0.35)]"
+                : "border border-(--card-border) bg-white/70 text-foreground dark:bg-white/5"
             }`}
           >
             {visibilityLabels[option]}
@@ -728,8 +901,8 @@ function ActionButton({
       disabled={disabled}
       className={`rounded-full px-5 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-55 ${
         variant === "accent"
-          ? "bg-[var(--accent)] text-white hover:bg-[var(--accent-strong)]"
-          : "bg-[#101828] text-white hover:bg-[#1f2937]"
+          ? "bg-[linear-gradient(135deg,var(--accent),var(--accent-strong))] text-white shadow-[0_18px_40px_rgba(255,77,79,0.28)] hover:brightness-110"
+          : "border border-(--card-border) bg-white/70 text-foreground hover:bg-white dark:bg-white/6 dark:text-white dark:hover:bg-white/10"
       }`}
     >
       {label}
@@ -739,11 +912,11 @@ function ActionButton({
 
 function StatCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-[24px] border border-[color:var(--card-border)] bg-[var(--card)] px-5 py-6 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur">
-      <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--muted)]">
+    <div className="rounded-[26px] border border-(--card-border) bg-[linear-gradient(180deg,var(--card-elevated),var(--card))] px-5 py-6 shadow-(--shadow-soft)">
+      <p className="text-xs font-semibold uppercase tracking-[0.22em] text-(--muted)">
         {label}
       </p>
-      <p className="mt-3 text-3xl font-semibold tracking-tight text-[var(--foreground)]">
+      <p className="mt-3 text-3xl font-semibold tracking-tight text-foreground">
         {value}
       </p>
     </div>
@@ -772,13 +945,13 @@ function GroupList({
       {items.map((item) => (
         <div
           key={item.key}
-          className="flex flex-col justify-between gap-3 rounded-2xl border border-[color:var(--card-border)] bg-white/60 px-4 py-4 dark:bg-white/4 sm:flex-row sm:items-center"
+          className="flex flex-col justify-between gap-3 rounded-3xl border border-(--card-border) bg-white/70 px-4 py-4 shadow-(--shadow-soft) sm:flex-row sm:items-center dark:bg-white/5"
         >
           <div>
-            <p className="text-base font-semibold text-[var(--foreground)]">
+            <p className="text-base font-semibold text-foreground">
               {item.title}
             </p>
-            <p className="text-sm text-[var(--muted)]">{item.subtitle}</p>
+            <p className="text-sm text-(--muted)">{item.subtitle}</p>
           </div>
           <ActionButton label={item.actionLabel} onClick={item.onAction} />
         </div>
@@ -786,3 +959,76 @@ function GroupList({
     </div>
   );
 }
+
+function CopyableIdentity({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | null;
+}) {
+  const displayValue = value ?? "N/A";
+
+  async function copyValue() {
+    if (!value || typeof navigator === "undefined" || !navigator.clipboard) {
+      return;
+    }
+
+    await navigator.clipboard.writeText(value);
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-3 rounded-3xl border border-(--card-border) bg-white/70 px-4 py-4 dark:bg-white/5">
+      <div className="min-w-0 flex-1">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-(--muted)">
+          {label}
+        </p>
+        <p className="mt-1 break-all font-mono text-sm text-foreground">{displayValue}</p>
+      </div>
+      <button
+        type="button"
+        onClick={() => void copyValue()}
+        disabled={!value}
+        className="rounded-full border border-(--card-border) bg-white/70 px-4 py-2 text-xs font-semibold text-foreground transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white/6 dark:hover:bg-white/10"
+      >
+        Kopiuj
+      </button>
+    </div>
+  );
+}
+
+function getUserIdFromAccessToken(accessToken?: string) {
+  if (!accessToken) {
+    return null;
+  }
+
+  const payload = accessToken.split(".")[1];
+  if (!payload) {
+    return null;
+  }
+
+  try {
+    const decoded = JSON.parse(base64UrlDecode(payload)) as Record<string, unknown>;
+    const nameIdentifier = decoded["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"];
+
+    if (typeof nameIdentifier === "string" && nameIdentifier.trim().length > 0) {
+      return nameIdentifier;
+    }
+
+    const subject = decoded.sub;
+    if (typeof subject === "string" && subject.trim().length > 0) {
+      return subject;
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function base64UrlDecode(value: string) {
+  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padding = "=".repeat((4 - (normalized.length % 4)) % 4);
+  return atob(`${normalized}${padding}`);
+}
+

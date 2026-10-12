@@ -1,5 +1,8 @@
 import type {
+  AddFriendRequest,
+  AddFriendResponse,
   ApiMessageResponse,
+  FriendResponse,
   GroupRole,
   GroupVisibility,
 } from "@/features/app/types";
@@ -104,6 +107,14 @@ export const api = {
     request<void>(
       path,
       { method: "POST", body: JSON.stringify({}) },
+      accessToken,
+    ),
+  getFriends: (accessToken?: string) =>
+    request<FriendResponse[]>("/api/Friends", { method: "GET" }, accessToken),
+  addFriend: (body: AddFriendRequest, accessToken?: string) =>
+    request<AddFriendResponse>(
+      "/api/Friends",
+      { method: "POST", body: JSON.stringify(body) },
       accessToken,
     ),
 };
