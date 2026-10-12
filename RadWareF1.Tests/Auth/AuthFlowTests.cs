@@ -6,7 +6,6 @@ using RadWareF1.Application.Contracts.Auth.Login;
 using RadWareF1.Application.Contracts.Auth.LoginUser;
 using RadWareF1.Application.Contracts.Auth.RefreshToken;
 using RadWareF1.Application.Contracts.Auth.User;
-using RadWareF1.Domain;
 using RadWareF1.Persistance;
 using RadWareF1.Tests.Infrastructure;
 
@@ -37,7 +36,7 @@ public class AuthFlowTests : IClassFixture<TestWebApplicationFactory>
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.NotNull(result);
-        Assert.False(string.IsNullOrWhiteSpace(result!.AccessToken));
+        Assert.False(string.IsNullOrWhiteSpace(result.AccessToken));
         Assert.False(string.IsNullOrWhiteSpace(result.RefreshToken));
     }
 
@@ -85,11 +84,12 @@ public class AuthFlowTests : IClassFixture<TestWebApplicationFactory>
         _client.SetBearerToken(loginResponse.AccessToken);
 
         var response = await _client.GetAsync("/api/user/me");
-        var result = await response.ReadAsJsonAsync<MeResponse>();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var result = await response.ReadAsJsonAsync<MeResponse>();
         Assert.NotNull(result);
-        Assert.Equal("test@test.com", result!.Email);
+        Assert.Equal("test@test.com", result.Email);
     }
 
     [Fact]
@@ -107,7 +107,7 @@ public class AuthFlowTests : IClassFixture<TestWebApplicationFactory>
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.NotNull(result);
-        Assert.False(string.IsNullOrWhiteSpace(result!.AccessToken));
+        Assert.False(string.IsNullOrWhiteSpace(result.AccessToken));
         Assert.False(string.IsNullOrWhiteSpace(result.RefreshToken));
         Assert.NotEqual(loginResponse.AccessToken, result.AccessToken);
         Assert.NotEqual(loginResponse.RefreshToken, result.RefreshToken);
@@ -194,6 +194,6 @@ public class AuthFlowTests : IClassFixture<TestWebApplicationFactory>
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.NotNull(result);
 
-        return result!;
+        return result;
     }
 }

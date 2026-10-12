@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -24,6 +25,27 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             services.RemoveAll<DbContextOptions<AppDbContext>>();
             services.RemoveAll<IDbContextOptionsConfiguration<AppDbContext>>();
             services.RemoveAll<AppDbContext>();
+
+            services.AddAuthentication(options =>
+            {
+                options.DefaultAuthenticateScheme = "TestOrBearer";
+                options.DefaultChallengeScheme = "TestOrBearer";
+            })
+            .AddPolicyScheme("TestOrBearer", "Test or Bearer", options =>
+            {
+                options.ForwardDefaultSelector = context =>
+                {
+                    if (context.Request.Headers.Authorization.Count > 0)
+                    {
+                        return Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme;
+                    }
+
+                    return TestAuthenticationHandler.SchemeName;
+                };
+            })
+            .AddScheme<AuthenticationSchemeOptions, TestAuthenticationHandler>(
+                TestAuthenticationHandler.SchemeName,
+                _ => { });
 
             _connection = new SqliteConnection("Data Source=:memory:");
             _connection.Open();

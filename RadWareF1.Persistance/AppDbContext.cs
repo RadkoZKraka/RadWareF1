@@ -138,7 +138,7 @@ public class AppDbContext : DbContext
                 .IsRequired();
 
             entity.HasOne(x => x.User)
-                .WithMany()
+                .WithMany(x => x.GroupMembers)
                 .HasForeignKey(x => x.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
 

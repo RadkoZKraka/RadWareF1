@@ -20,7 +20,18 @@ public class UserController : ControllerBase
     [Authorize]
     public async Task<ActionResult<MeResponse>> Me(CancellationToken cancellationToken)
     {
-        var response = await _userService.GetMeAsync(cancellationToken);
-        return Ok(response);
+        try
+        {
+            var response = await _userService.GetMeAsync(cancellationToken);
+            return Ok(response);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
     }
 }

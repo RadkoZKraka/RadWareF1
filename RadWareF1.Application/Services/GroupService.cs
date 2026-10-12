@@ -36,7 +36,8 @@ public class GroupService : IGroupService
         group.Members.Add(new GroupMember
         {
             UserId = userId,
-            Role = GroupRoleEnum.Owner
+            Role = GroupRoleEnum.Owner,
+            JoinedAtUtc = DateTime.UtcNow
         });
 
         _dbContext.Groups.Add(group);

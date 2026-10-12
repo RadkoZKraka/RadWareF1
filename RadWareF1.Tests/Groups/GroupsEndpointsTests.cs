@@ -24,6 +24,18 @@ public class GroupsEndpointsTests : IClassFixture<TestWebApplicationFactory>
         var client = _factory.CreateClient();
         var userId = Guid.NewGuid();
 
+        using (var seedScope = _factory.Services.CreateScope())
+        {
+            var seedDb = seedScope.ServiceProvider.GetRequiredService<AppDbContext>();
+            seedDb.Users.Add(new User
+            {
+                Id = userId,
+                Email = "create-owner@test.com",
+                PasswordHash = "hash"
+            });
+            await seedDb.SaveChangesAsync();
+        }
+
         client.DefaultRequestHeaders.Add("X-Test-UserId", userId.ToString());
 
         var request = new CreateGroupRequest
@@ -39,8 +51,8 @@ public class GroupsEndpointsTests : IClassFixture<TestWebApplicationFactory>
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        var group = db.Groups.Single();
-        var member = db.GroupMembers.Single();
+        var group = db.Groups.Single(x => x.Name == "Test Group");
+        var member = db.GroupMembers.Single(x => x.GroupId == group.Id && x.UserId == userId);
 
         Assert.Equal("Test Group", group.Name);
         Assert.Equal(GroupVisibilityEnum.Public, group.Visibility);
@@ -62,6 +74,20 @@ public class GroupsEndpointsTests : IClassFixture<TestWebApplicationFactory>
         {
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
+            db.Users.AddRange(
+                new User
+                {
+                    Id = ownerId,
+                    Email = "join-owner@test.com",
+                    PasswordHash = "hash"
+                },
+                new User
+                {
+                    Id = joiningUserId,
+                    Email = "join-user@test.com",
+                    PasswordHash = "hash"
+                });
+
             var group = new Group
             {
                 Id = Guid.NewGuid(),
@@ -78,7 +104,8 @@ public class GroupsEndpointsTests : IClassFixture<TestWebApplicationFactory>
             {
                 GroupId = group.Id,
                 UserId = ownerId,
-                Role = GroupRoleEnum.Owner
+                Role = GroupRoleEnum.Owner,
+                JoinedAtUtc = DateTime.UtcNow
             });
 
             await db.SaveChangesAsync();
@@ -92,7 +119,7 @@ public class GroupsEndpointsTests : IClassFixture<TestWebApplicationFactory>
             JoinCode = joinCode
         };
 
-        var response = await client.PostAsJsonAsync("/api/groups/join", request);
+        var response = await client.PostAsJsonAsync($"/api/groups/{groupId}/join", request);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
@@ -116,7 +143,7 @@ public class GroupsEndpointsTests : IClassFixture<TestWebApplicationFactory>
             JoinCode = "WRONG123"
         };
 
-        var response = await client.PostAsJsonAsync("/groups/join", request);
+        var response = await client.PostAsJsonAsync($"/api/groups/{Guid.NewGuid()}/join", request);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -131,6 +158,13 @@ public class GroupsEndpointsTests : IClassFixture<TestWebApplicationFactory>
         {
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
+            db.Users.Add(new User
+            {
+                Id = userId,
+                Email = "leave-user@test.com",
+                PasswordHash = "hash"
+            });
+
             db.Groups.Add(new Group
             {
                 Id = groupId,
@@ -144,7 +178,8 @@ public class GroupsEndpointsTests : IClassFixture<TestWebApplicationFactory>
             {
                 GroupId = groupId,
                 UserId = userId,
-                Role = GroupRoleEnum.User
+                Role = GroupRoleEnum.User,
+                JoinedAtUtc = DateTime.UtcNow
             });
 
             await db.SaveChangesAsync();
@@ -155,7 +190,7 @@ public class GroupsEndpointsTests : IClassFixture<TestWebApplicationFactory>
 
         var response = await client.PostAsync($"/api/groups/{groupId}/leave", null);
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
 
         using var verifyScope = _factory.Services.CreateScope();
         var verifyDb = verifyScope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -175,6 +210,13 @@ public class GroupsEndpointsTests : IClassFixture<TestWebApplicationFactory>
         {
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
+            db.Users.Add(new User
+            {
+                Id = ownerId,
+                Email = "group-read-owner@test.com",
+                PasswordHash = "hash"
+            });
+
             db.Groups.Add(new Group
             {
                 Id = groupId,
@@ -188,7 +230,8 @@ public class GroupsEndpointsTests : IClassFixture<TestWebApplicationFactory>
             {
                 GroupId = groupId,
                 UserId = ownerId,
-                Role = GroupRoleEnum.Owner
+                Role = GroupRoleEnum.Owner,
+                JoinedAtUtc = DateTime.UtcNow
             });
 
             await db.SaveChangesAsync();
@@ -213,6 +256,20 @@ public class GroupsEndpointsTests : IClassFixture<TestWebApplicationFactory>
         {
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
+            db.Users.AddRange(
+                new User
+                {
+                    Id = ownerId,
+                    Email = "members-owner@test.com",
+                    PasswordHash = "hash"
+                },
+                new User
+                {
+                    Id = memberId,
+                    Email = "members-user@test.com",
+                    PasswordHash = "hash"
+                });
+
             db.Groups.Add(new Group
             {
                 Id = groupId,
@@ -227,13 +284,15 @@ public class GroupsEndpointsTests : IClassFixture<TestWebApplicationFactory>
                 {
                     GroupId = groupId,
                     UserId = ownerId,
-                    Role = GroupRoleEnum.Owner
+                    Role = GroupRoleEnum.Owner,
+                    JoinedAtUtc = DateTime.UtcNow
                 },
                 new GroupMember
                 {
                     GroupId = groupId,
                     UserId = memberId,
-                    Role = GroupRoleEnum.User
+                    Role = GroupRoleEnum.User,
+                    JoinedAtUtc = DateTime.UtcNow
                 });
 
             await db.SaveChangesAsync();

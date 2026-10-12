@@ -58,8 +58,15 @@ public class GroupsController : ControllerBase
             return Unauthorized();
         }
 
-        var response = await _groupService.GetByIdAsync(groupId, userId, cancellationToken);
-        return Ok(response);
+        try
+        {
+            var response = await _groupService.GetByIdAsync(groupId, userId, cancellationToken);
+            return Ok(response);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
     }
 
     [HttpGet("mine")]
@@ -92,8 +99,15 @@ public class GroupsController : ControllerBase
             return Unauthorized();
         }
 
-        var response = await _groupService.JoinAsync(request, userId, cancellationToken);
-        return Ok(response);
+        try
+        {
+            var response = await _groupService.JoinAsync(request, userId, cancellationToken);
+            return Ok(response);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
     }
 
     [HttpPost("{groupId:guid}/leave")]
@@ -109,8 +123,15 @@ public class GroupsController : ControllerBase
             return Unauthorized();
         }
 
-        await _groupService.LeaveAsync(groupId, userId, cancellationToken);
-        return NoContent();
+        try
+        {
+            await _groupService.LeaveAsync(groupId, userId, cancellationToken);
+            return NoContent();
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
     }
 
     [HttpGet("{groupId:guid}/members")]
@@ -126,8 +147,15 @@ public class GroupsController : ControllerBase
             return Unauthorized();
         }
 
-        var response = await _groupService.GetMembersAsync(groupId, userId, cancellationToken);
-        return Ok(response);
+        try
+        {
+            var response = await _groupService.GetMembersAsync(groupId, userId, cancellationToken);
+            return Ok(response);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
     }
 
     [HttpPatch("{groupId:guid}")]
@@ -144,7 +172,14 @@ public class GroupsController : ControllerBase
             return Unauthorized();
         }
 
-        var response = await _groupService.UpdateAsync(groupId, userId, request, cancellationToken);
-        return Ok(response);
+        try
+        {
+            var response = await _groupService.UpdateAsync(groupId, userId, request, cancellationToken);
+            return Ok(response);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
     }
 }
